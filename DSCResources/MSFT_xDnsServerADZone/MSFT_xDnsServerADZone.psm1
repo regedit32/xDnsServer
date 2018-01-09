@@ -210,14 +210,14 @@ function Set-TargetResource
             ## Update the existing zone
             $updateParams = @{
                 Name = $targetResource.Name
+            }
+        if($targetResource.CimSession) 
+        {
+            $addParams += @{
                 CimSession = $targetResource.CimSession
             }
-            if ($targetResource.DynamicUpdate -ne $DynamicUpdate)
-            {
-                $updateParams += @{DynamicUpdate = $DynamicUpdate}
-                Write-Verbose ($LocalizedData.SetPropertyMessage -f 'DynamicUpdate')
-            }
-            if ($targetResource.ReplicationScope -ne $ReplicationScope)
+        }
+        if ($targetResource.ReplicationScope -ne $ReplicationScope)
             {
                 $updateParams += @{ReplicationScope = $ReplicationScope}
                 Write-Verbose ($LocalizedData.SetPropertyMessage -f 'ReplicationScope')
