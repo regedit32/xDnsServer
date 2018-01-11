@@ -21,7 +21,7 @@ function Get-TargetResource
     [OutputType([System.Collections.Hashtable])]
     param
     (
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
         [System.String]
         $Name,
@@ -31,7 +31,7 @@ function Get-TargetResource
         [System.String]
         $DynamicUpdate = 'Secure',
 
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory = $true)]
         [ValidateSet('Custom','Domain','Forest','Legacy')]
         [System.String]
         $ReplicationScope,
@@ -53,28 +53,38 @@ function Get-TargetResource
         [System.String]
         $Ensure = 'Present'
     )
+
     Assert-Module -Name 'DNSServer'
     Write-Verbose ($LocalizedData.CheckingZoneMessage -f $Name, $Ensure)
-    $cimSessionParams = @{ErrorAction = 'SilentlyContinue'}
-    if ($ComputerName)
-    {
-        $cimSessionParams += @{ComputerName = $ComputerName}
-    }
-    else
-    {
-        $cimSessionParams += @{ComputerName = $env:COMPUTERNAME}
-    }
-    if ($Credential)
-    {
-        $cimSessionParams += @{Credential = $Credential}
-    }
-    $cimSession = New-CimSession @cimSessionParams
+
     $getParams = @{
         Name = $Name
-        CimSession = $cimSession
         ErrorAction = 'SilentlyContinue'
     }
+
+    if ($ComputerName)
+    {
+        $cimSessionParams = @{
+            ErrorAction = 'SilentlyContinue'
+            ComputerName = $ComputerName
+        }
+
+        if ($Credential)
+        {
+            $cimSessionParams += @{Credential = $Credential}
+        }
+        
+        $cimSession = New-CimSession @cimSessionParams
+        $getParams += @{CimSession = $cimSession}
+    }
+
     $dnsServerZone = Get-DnsServerZone @getParams
+
+    if($ComputerName) 
+    {
+        Remove-CimSession $cimSession
+    }
+    
     $targetResource = @{
         Name = $dnsServerZone.ZoneName
         DynamicUpdate = $dnsServerZone.DynamicUpdate
@@ -91,7 +101,7 @@ function Test-TargetResource
     [OutputType([System.Boolean])]
     param
     (
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
         [System.String]
         $Name,
@@ -101,7 +111,7 @@ function Test-TargetResource
         [System.String]
         $DynamicUpdate = 'Secure',
 
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory = $true)]
         [ValidateSet('Custom','Domain','Forest','Legacy')]
         [System.String]
         $ReplicationScope,
@@ -125,6 +135,7 @@ function Test-TargetResource
     )
     $targetResource = Get-TargetResource @PSBoundParameters
     $targetResourceInCompliance = $true
+    
     if ($Ensure -eq 'Present')
     {
         if ($targetResource.Ensure -eq 'Present')
@@ -169,7 +180,7 @@ function Set-TargetResource
     [CmdletBinding()]
     param
     (
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
         [System.String]
         $Name,
@@ -179,7 +190,7 @@ function Set-TargetResource
         [System.String]
         $DynamicUpdate = 'Secure',
 
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory = $true)]
         [ValidateSet('Custom','Domain','Forest','Legacy')]
         [System.String]
         $ReplicationScope,
@@ -211,13 +222,26 @@ function Set-TargetResource
             $updateParams = @{
                 Name = $targetResource.Name
             }
-        if($targetResource.CimSession) 
-        {
-            $addParams += @{
-                CimSession = $targetResource.CimSession
+            if ($ComputerName)
+            {
+                $cimSessionParams = @{
+                    ErrorAction = 'SilentlyContinue'
+                    ComputerName = $ComputerName
+                }
+                
+                if ($Credential)
+                {
+                    $cimSessionParams += @{Credential = $Credential}
+                }
+                $cimSession = New-CimSession @cimSessionParams
+                $updateParams += @{CimSession = $cimSession}
             }
-        }
-        if ($targetResource.ReplicationScope -ne $ReplicationScope)
+            if ($targetResource.DynamicUpdate -ne $DynamicUpdate)
+            {
+                $updateParams += @{DynamicUpdate = $DynamicUpdate}
+                Write-Verbose ($LocalizedData.SetPropertyMessage -f 'DynamicUpdate')
+            }
+            if ($targetResource.ReplicationScope -ne $ReplicationScope)
             {
                 $updateParams += @{ReplicationScope = $ReplicationScope}
                 Write-Verbose ($LocalizedData.SetPropertyMessage -f 'ReplicationScope')
@@ -237,7 +261,19 @@ function Set-TargetResource
                 Name = $Name
                 DynamicUpdate = $DynamicUpdate
                 ReplicationScope = $ReplicationScope
-                CimSession = $targetResource.CimSession
+            }
+            if ($ComputerName)
+            {
+                $cimSessionParams = @{
+                    ErrorAction = 'SilentlyContinue'
+                    ComputerName = $ComputerName
+                }
+                if ($Credential)
+                {
+                    $cimSessionParams += @{Credential = $Credential}
+                }
+                $cimSession = New-CimSession @cimSessionParams
+                $addParams += @{CimSession = $cimSession}
             }
             if ($DirectoryPartitionName)
             {
@@ -252,6 +288,30 @@ function Set-TargetResource
     {
         # Remove the DNS Server zone
         Write-Verbose ($LocalizedData.RemovingZoneMessage -f $targetResource.Name)
-        Remove-DnsServerZone -Name $targetResource.Name -ComputerName $ComputerName -Force
+        $removeParams = @{
+            Name = $targetResource.Name
+            Force = $true
+        }
+
+        if ($ComputerName)
+        {
+            $cimSessionParams = @{
+                ErrorAction = 'SilentlyContinue'
+                ComputerName = $ComputerName
+            }
+
+            if ($Credential)
+            {
+                $cimSessionParams += @{Credential = $Credential}
+            }
+            $cimSession = New-CimSession @cimSessionParams
+            $removeParams += @{CimSession = $cimSession}
+        }
+        Remove-DnsServerZone @removeParams
+    }
+
+    if($ComputerName) 
+    {
+        Remove-CimSession $cimSession
     }
 } #end function Set-TargetResource
